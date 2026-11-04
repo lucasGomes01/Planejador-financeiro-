@@ -57,7 +57,12 @@ export function goalStatus(
       neededMonthly = missing <= 0 ? 0 : r > 0 ? (missing * r) / (Math.pow(1 + r, n) - 1) : missing / n;
     }
   }
+  const lumpsByYM = new Map<string, number>();
+  for (const [i, v] of lumps) lumpsByYM.set(addMonths(now, i), v);
+  /** What enters the goal in a given future month: planned contribution + earmarked incomes. */
+  const contribution = (ym: string) => goal.monthly_contribution + (lumpsByYM.get(ym) ?? 0);
   return {
+    contribution, linkedIds,
     parts, inAccounts, pending, pendingItems, future, futureItems, saved,
     progress: Math.min(1, saved / goal.target_amount),
     monthlyYield: proj.monthlyYield, months: proj.months, reachYM, path: proj.path, neededMonthly,

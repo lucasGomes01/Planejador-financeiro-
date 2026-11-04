@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useData } from '../../context/DataContext';
 import { confirm } from '../../lib/confirm';
 import { goalStatus } from '../../lib/goals';
-import { addMonths, currentYM } from '../../lib/finance';
+import { balanceSeries } from '../../lib/finance';
 import { money, monthLong } from '../../lib/format';
 import { rateLabel, typeColor } from '../../lib/types';
 import { dateBR } from '../../lib/format';
@@ -23,7 +23,11 @@ export default function GoalDetail() {
     [goal, investments, balances, settings, transactions, snapshots]);
   if (!goal || !st) return <Screen><Empty>Meta não encontrada.</Empty></Screen>;
 
-  const path = st.path.slice(0, 61).map((value, i) => ({ ym: addMonths(currentYM(), i), value, projected: i > 0 }));
+  const path = balanceSeries({
+    snapshots, investments, selected: st.linkedIds, monthsBack: 0,
+    monthsAhead: Math.min(60, Math.max(6, st.months ?? 60)), cdiAnnual: settings.cdi_annual_rate,
+    contribution: st.contribution, startExtra: st.pending,
+  });
 
   return (
     <Screen>

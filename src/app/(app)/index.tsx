@@ -3,6 +3,7 @@ import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useData } from '../../context/DataContext';
 import { balanceSeries, currentYM, monthSummary } from '../../lib/finance';
+import { goalStatus } from '../../lib/goals';
 import { money, monthLong } from '../../lib/format';
 import { INVESTMENT_TYPES, typeColor, type InvestmentType } from '../../lib/types';
 import { LineChart } from '../../components/LineChart';
@@ -13,16 +14,30 @@ import { colors } from '../../components/theme';
 type Range = '6' | '12' | '24';
 
 export default function Dashboard() {
-  const { investments, snapshots, transactions, settings, balances, reload, loading, error } = useData();
+  const { investments, snapshots, transactions, goals, settings, balances, reload, loading, error } = useData();
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [range, setRange] = useState<Range>('12');
   const [projection, setProjection] = useState(true);
+  /** null = everything; otherwise only what is earmarked for this goal */
+  const [goalId, setGoalId] = useState<string | null>(null);
 
-  const selected = useMemo(() => new Set(investments.map((i) => i.id).filter((id) => !excluded.has(id))), [investments, excluded]);
+  const goal = goals.find((g) => g.id === goalId) ?? null;
+  const goalSt = useMemo(
+    () => goal && goalStatus(goal, investments, balances, settings.cdi_annual_rate, transactions, snapshots),
+    [goal, investments, balances, settings, transactions, snapshots],
+  );
+  const base = useMemo(
+    () => (goal ? investments.filter((i) => i.goal_id === goal.id) : investments),
+    [goal, investments],
+  );
+  const selected = useMemo(() => new Set(base.map((i) => i.id).filter((id) => !excluded.has(id))), [base, excluded]);
+
   const series = useMemo(() => balanceSeries({
     snapshots, investments, selected, monthsBack: Number(range) - 1, monthsAhead: projection ? 12 : 0,
-    cdiAnnual: settings.cdi_annual_rate, transactions, includeNetInProjection: true,
-  }), [snapshots, investments, selected, range, projection, settings, transactions]);
+    cdiAnnual: settings.cdi_annual_rate,
+    contribution: goalSt ? goalSt.contribution : (ym) => monthSummary(transactions, ym).net,
+    startExtra: goalSt ? goalSt.pending : 0,
+  }), [snapshots, investments, selected, range, projection, settings, transactions, goalSt]);
 
   const month = monthSummary(transactions, currentYM());
   const totalAll = investments.reduce((s, i) => s + (balances.get(i.id) ?? 0), 0);
@@ -31,14 +46,14 @@ export default function Dashboard() {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
   });
   const toggleType = (t: InvestmentType) => {
-    const ids = investments.filter((i) => i.type === t).map((i) => i.id);
+    const ids = base.filter((i) => i.type === t).map((i) => i.id);
     const allOn = ids.every((id) => !excluded.has(id));
     setExcluded((prev) => { const n = new Set(prev); ids.forEach((id) => (allOn ? n.add(id) : n.delete(id))); return n; });
   };
-  const byType = INVESTMENT_TYPES.map((t) => ({
+  const typesIn = (list: typeof investments) => INVESTMENT_TYPES.map((t) => ({
     ...t,
-    total: investments.filter((i) => i.type === t.value).reduce((s, i) => s + (balances.get(i.id) ?? 0), 0),
-    count: investments.filter((i) => i.type === t.value).length,
+    total: list.filter((i) => i.type === t.value).reduce((s, i) => s + (balances.get(i.id) ?? 0), 0),
+    count: list.filter((i) => i.type === t.value).length,
   })).filter((t) => t.count > 0);
 
   return (
@@ -48,42 +63,58 @@ export default function Dashboard() {
         <View style={{ width: '100%', maxWidth: 820, alignSelf: 'center' }}>
           <ErrorText>{error}</ErrorText>
           <Card>
-            <Subtitle>Valor guardado</Subtitle>
+            <Subtitle>{goal ? `Guardado para ${goal.name}` : 'Valor guardado'}</Subtitle>
+            {goals.length > 0 && (
+              <Row style={{ flexWrap: 'wrap', marginBottom: 10 }}>
+                <Chip label="Tudo" active={goalId == null} onPress={() => setGoalId(null)} />
+                {goals.map((g) => (
+                  <Chip key={g.id} label={g.name} active={goalId === g.id} onPress={() => setGoalId(goalId === g.id ? null : g.id)} />
+                ))}
+              </Row>
+            )}
             <LineChart data={series} />
             <Segmented<Range> value={range} onChange={setRange}
               options={[{ value: '6', label: '6 meses' }, { value: '12', label: '1 ano' }, { value: '24', label: '2 anos' }]} />
             <Row style={{ flexWrap: 'wrap', marginBottom: 8 }}>
               <Chip label="Projeção 12 meses" active={projection} onPress={() => setProjection(!projection)} color={colors.muted} />
             </Row>
-            {investments.length === 0 ? (
-              <Muted>Cadastre onde seu dinheiro está em “Patrimônio” para ver o gráfico.</Muted>
+            {base.length === 0 ? (
+              <Muted>
+                {goal ? `Nenhum local vinculado à meta ${goal.name}. Vincule em Metas.` : 'Cadastre onde seu dinheiro está em “Patrimônio” para ver o gráfico.'}
+              </Muted>
             ) : (
               <>
                 <Muted style={{ marginBottom: 6 }}>Somar no gráfico:</Muted>
                 <Row style={{ flexWrap: 'wrap', marginBottom: 8 }}>
-                  {byType.map((t) => (
+                  {typesIn(base).map((t) => (
                     <Chip key={t.value} label={t.label} color={t.color}
-                      active={investments.filter((i) => i.type === t.value).every((i) => !excluded.has(i.id))}
+                      active={base.filter((i) => i.type === t.value).every((i) => !excluded.has(i.id))}
                       onPress={() => toggleType(t.value)} />
                   ))}
                 </Row>
                 <Row style={{ flexWrap: 'wrap' }}>
-                  {investments.map((i) => (
+                  {base.map((i) => (
                     <Chip key={i.id} label={i.name} color={typeColor(i.type)} active={!excluded.has(i.id)} onPress={() => toggle(i.id)} />
                   ))}
                 </Row>
               </>
             )}
+            {goalSt && goalSt.pending > 0 ? (
+              <Muted style={{ marginTop: 10 }}>Inclui {money(goalSt.pending)} de ganhos pontuais destinados à meta ainda não lançados em um saldo.</Muted>
+            ) : null}
             {projection ? (
               <Muted style={{ marginTop: 10 }}>
-                Linha tracejada: rendimento pelo CDI ({String(settings.cdi_annual_rate).replace('.', ',')}% a.a.) + saldo mensal previsto.
+                Linha tracejada: rendimento pelo CDI ({String(settings.cdi_annual_rate).replace('.', ',')}% a.a.)
+                {goal
+                  ? ` + aporte mensal da meta (${money(goal.monthly_contribution)}) + ganhos pontuais destinados a ela.`
+                  : ' + sobra mensal prevista (ganhos − custos).'}
               </Muted>
             ) : null}
           </Card>
 
           <Card>
             <Subtitle>Patrimônio total: {money(totalAll)}</Subtitle>
-            {byType.map((t) => (
+            {typesIn(investments).map((t) => (
               <Row key={t.value} style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
                 <Row><View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: t.color }} /><Text>{t.label}</Text></Row>
                 <Text style={{ fontWeight: '600' }}>{money(t.total)}</Text>

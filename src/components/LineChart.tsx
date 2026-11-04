@@ -42,6 +42,18 @@ export function LineChart({ data, color = colors.primary }: { data: SeriesPoint[
             {monthShort(s.ym)}{s.projected ? ' · projeção' : ''}
           </Text>
           <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text }}>{money(s.value)}</Text>
+          {s.projected && s.gainYield != null ? (
+            <>
+              <Text style={{ color: colors.income, fontWeight: '700', marginTop: 2 }}>
+                Ganho previsto até aqui: {money(s.gainYield + (s.gainContrib ?? 0))}
+              </Text>
+              <Text style={{ color: colors.muted, fontSize: 12 }}>
+                rendimento {money(s.gainYield)} · aportes {money(s.gainContrib ?? 0)}
+              </Text>
+            </>
+          ) : data.some((d) => d.projected) && sel == null ? (
+            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Toque na linha tracejada para ver o ganho previsto.</Text>
+          ) : null}
         </View>
       ) : null}
       {width > 0 && (

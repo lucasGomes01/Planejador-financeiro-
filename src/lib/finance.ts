@@ -76,7 +76,15 @@ export function monthlyYield(cdiAnnual: number, inv: RateInfo, value: number): n
   return Math.min(value, inv.cdi_limit) * r1 + Math.max(0, value - inv.cdi_limit) * r2;
 }
 
-export interface SeriesPoint { ym: string; value: number; projected?: boolean }
+export interface SeriesPoint {
+  ym: string;
+  value: number;
+  projected?: boolean;
+  /** projected points: yield earned from now until this month */
+  gainYield?: number;
+  /** projected points: contributions (planned net, earmarked incomes…) from now until this month */
+  gainContrib?: number;
+}
 
 /** A holding being simulated month by month. */
 export interface Holding { value: number; inv: RateInfo }
@@ -92,7 +100,9 @@ const avgRateOf = (hs: Holding[], cdi: number) => {
 /**
  * Total balance per month of the selected investments.
  * Past months use recorded snapshots (carrying the last value forward).
- * Optional projection: CDI yield + the planned monthly net (income − expenses).
+ * Projection: each holding's CDI yield + `contribution(ym)` added every month
+ * (contributions grow at the holdings' average rate). `startExtra` is money that
+ * already counts today but is not in any balance yet.
  */
 export function balanceSeries(opts: {
   snapshots: Snapshot[];
@@ -101,18 +111,19 @@ export function balanceSeries(opts: {
   monthsBack: number;
   monthsAhead: number;
   cdiAnnual: number;
-  transactions: Transaction[];
-  includeNetInProjection: boolean;
+  contribution?: (ym: string) => number;
+  startExtra?: number;
 }): SeriesPoint[] {
   const { snapshots, investments, selected, monthsBack, monthsAhead, cdiAnnual } = opts;
   const now = currentYM();
   const points: SeriesPoint[] = [];
   const snaps = snapshots.filter((s) => selected.has(s.investment_id));
+  const startExtra = opts.startExtra ?? 0;
 
   for (let i = monthsBack; i >= 0; i--) {
     const ym = addMonths(now, -i);
     const bal = balancesAt(snaps, i === 0 ? undefined : endOfMonthISO(ym));
-    points.push({ ym, value: totalOf(bal, selected) });
+    points.push({ ym, value: totalOf(bal, selected) + (i === 0 ? startExtra : 0) });
   }
 
   if (monthsAhead > 0) {
@@ -121,14 +132,24 @@ export function balanceSeries(opts: {
       .filter((inv) => selected.has(inv.id))
       .map((inv) => ({ value: bal.get(inv.id) ?? 0, inv }));
     const avgRate = avgRateOf(hs, cdiAnnual);
-    let extra = 0; // contributions from planned net, growing at the average rate
+    let extra = startExtra;
+    let gainYield = 0;
+    let gainContrib = 0;
     for (let i = 1; i <= monthsAhead; i++) {
       const ym = addMonths(now, i);
-      for (const h of hs) h.value += monthlyYield(cdiAnnual, h.inv, h.value);
-      if (opts.includeNetInProjection) {
-        extra = extra * (1 + avgRate) + monthSummary(opts.transactions, ym).net;
+      for (const h of hs) {
+        const y = monthlyYield(cdiAnnual, h.inv, h.value);
+        h.value += y;
+        gainYield += y;
       }
-      points.push({ ym, value: hs.reduce((s, h) => s + h.value, 0) + extra, projected: true });
+      const extraYield = extra * avgRate;
+      const c = opts.contribution?.(ym) ?? 0;
+      extra += extraYield + c;
+      gainYield += extraYield;
+      gainContrib += c;
+      points.push({
+        ym, value: hs.reduce((s, h) => s + h.value, 0) + extra, projected: true, gainYield, gainContrib,
+      });
     }
   }
   return points;
