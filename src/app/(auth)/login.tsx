@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'expo-router';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 import { supabase, isConfigured } from '../../lib/supabase';
 import { isEmail } from '../../lib/password';
 import { Button, Card, ErrorText, Field, Muted, Screen, Title } from '../../components/ui';
@@ -26,7 +26,9 @@ export default function Login() {
   async function forgot() {
     setError(''); setInfo('');
     if (!isEmail(email)) return setError('Digite seu e-mail acima para recuperar a senha.');
-    await supabase.auth.resetPasswordForEmail(email.trim());
+    await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin : undefined,
+    });
     setInfo('Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha.');
   }
 

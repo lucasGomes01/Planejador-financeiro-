@@ -5,10 +5,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { DataProvider } from '../context/DataContext';
 import { AppLock } from '../components/AppLock';
+import { ResetPassword } from '../components/ResetPassword';
 import { colors } from '../components/theme';
 
 function RootNavigator() {
-  const { session, loading, needsMfa } = useAuth();
+  const { session, loading, needsMfa, recovering } = useAuth();
   if (loading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
@@ -17,6 +18,7 @@ function RootNavigator() {
     );
   }
   const signedIn = !!session && !needsMfa;
+  if (signedIn && recovering) return <ResetPassword />;
   return (
     <Stack screenOptions={{ headerTintColor: colors.primary, contentStyle: { backgroundColor: colors.bg } }}>
       <Stack.Protected guard={!session}>

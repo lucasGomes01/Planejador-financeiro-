@@ -7,6 +7,9 @@ interface AuthState {
   loading: boolean;
   /** true when the user has MFA enrolled but this session has not passed it yet */
   needsMfa: boolean;
+  /** true after opening a password-reset link: the user must set a new password */
+  recovering: boolean;
+  finishRecovery: () => void;
   refreshAal: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -17,6 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsMfa, setNeedsMfa] = useState(false);
+  const [recovering, setRecovering] = useState(false);
 
   const refreshAal = useCallback(async () => {
     const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
@@ -31,8 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.session) await refreshAal();
       setLoading(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true);
+      if (event === 'SIGNED_OUT') setRecovering(false);
       // Do not await Supabase calls inside this callback (can deadlock); defer.
       if (s) setTimeout(refreshAal, 0);
       else setNeedsMfa(false);
@@ -47,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
-  return <Ctx.Provider value={{ session, loading, needsMfa, refreshAal, signOut }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ session, loading, needsMfa, recovering, finishRecovery: () => setRecovering(false), refreshAal, signOut }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {
