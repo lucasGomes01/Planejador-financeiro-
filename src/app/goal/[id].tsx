@@ -61,7 +61,8 @@ export default function GoalDetail() {
           {path.length > 1 && (
             <Card>
               <Subtitle>Projeção</Subtitle>
-              <LineChart data={path} />
+              <LineChart data={path} cdiLabel={`${String(settings.cdi_annual_rate).replace('.', ',')}%`}
+                contribLabel="Aportes da meta" />
             </Card>
           )}
 

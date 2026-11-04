@@ -72,7 +72,8 @@ export default function Dashboard() {
                 ))}
               </Row>
             )}
-            <LineChart data={series} />
+            <LineChart data={series} cdiLabel={`${String(settings.cdi_annual_rate).replace('.', ',')}%`}
+              contribLabel={goal ? 'Aportes da meta' : 'Sobra mensal prevista'} />
             <Segmented<Range> value={range} onChange={setRange}
               options={[{ value: '6', label: '6 meses' }, { value: '12', label: '1 ano' }, { value: '24', label: '2 anos' }]} />
             <Row style={{ flexWrap: 'wrap', marginBottom: 8 }}>

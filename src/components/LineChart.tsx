@@ -8,7 +8,16 @@ import type { SeriesPoint } from '../lib/finance';
 const H = 220;
 const PAD = { l: 56, r: 22, t: 12, b: 28 };
 
-export function LineChart({ data, color = colors.primary }: { data: SeriesPoint[]; color?: string }) {
+export function LineChart({
+  data, color = colors.primary, contribLabel = 'Aportes', cdiLabel,
+}: {
+  data: SeriesPoint[];
+  color?: string;
+  /** what the contributions are, e.g. "Sobra mensal prevista" */
+  contribLabel?: string;
+  /** e.g. "14,9%" */
+  cdiLabel?: string;
+}) {
   const [width, setWidth] = useState(0);
   const [sel, setSel] = useState<number | null>(null);
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
@@ -33,28 +42,39 @@ export function LineChart({ data, color = colors.primary }: { data: SeriesPoint[
   const labelEvery = Math.max(1, Math.ceil(data.length / Math.max(1, Math.floor(w / 56))));
   const step = data.length > 1 ? w / (data.length - 1) : w;
   const s = sel != null ? data[sel] : data[realEnd >= 0 ? realEnd : 0];
+  const base = realEnd >= 0 ? data[realEnd] : null;
 
   return (
     <View onLayout={onLayout}>
       {s ? (
-        <View style={{ marginBottom: 6 }}>
-          <Text style={{ color: colors.muted, fontSize: 12 }}>
-            {monthShort(s.ym)}{s.projected ? ' · projeção' : ''}
-          </Text>
-          <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text }}>{money(s.value)}</Text>
-          {s.projected && s.gainYield != null ? (
-            <>
-              <Text style={{ color: colors.income, fontWeight: '700', marginTop: 2 }}>
-                Ganho previsto até aqui: {money(s.gainYield + (s.gainContrib ?? 0))}
+        s.projected && s.gainYield != null && base ? (
+          <View style={{ marginBottom: 8 }}>
+            <Text style={{ color: colors.muted, fontSize: 12 }}>
+              Previsto em {monthShort(s.ym)} (daqui a {monthsAhead(base.ym, s.ym)})
+            </Text>
+            <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text }}>{money(s.value)}</Text>
+            <View style={{ backgroundColor: colors.bg, borderRadius: 10, padding: 10, marginTop: 6, gap: 3 }}>
+              <Step label={`Hoje (${monthShort(base.ym)})`} value={base.value} />
+              <Step label="+ Juros do CDI até lá" value={s.gainYield} color={colors.income} />
+              <Step label={`+ ${contribLabel}`} value={s.gainContrib ?? 0} color={(s.gainContrib ?? 0) < 0 ? colors.expense : colors.income} />
+              <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 2 }} />
+              <Step label="= Total previsto" value={s.value} bold />
+            </View>
+            <Text style={{ color: colors.muted, fontSize: 11, marginTop: 4 }}>
+              Juros brutos (antes do IR){cdiLabel ? `, com CDI de ${cdiLabel} ao ano` : ''}. Ações e locais sem % do CDI não rendem na previsão.
+            </Text>
+          </View>
+        ) : (
+          <View style={{ marginBottom: 6 }}>
+            <Text style={{ color: colors.muted, fontSize: 12 }}>{monthShort(s.ym)}</Text>
+            <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text }}>{money(s.value)}</Text>
+            {data.some((d) => d.projected) ? (
+              <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
+                Toque na linha tracejada para ver quanto você terá em cada mês.
               </Text>
-              <Text style={{ color: colors.muted, fontSize: 12 }}>
-                rendimento {money(s.gainYield)} · aportes {money(s.gainContrib ?? 0)}
-              </Text>
-            </>
-          ) : data.some((d) => d.projected) && sel == null ? (
-            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Toque na linha tracejada para ver o ganho previsto.</Text>
-          ) : null}
-        </View>
+            ) : null}
+          </View>
+        )
       ) : null}
       {width > 0 && (
         <Svg width={width} height={H}>
@@ -96,6 +116,22 @@ export function LineChart({ data, color = colors.primary }: { data: SeriesPoint[
           ))}
         </Svg>
       )}
+    </View>
+  );
+}
+
+function monthsAhead(from: string, to: string) {
+  const [ya, ma] = from.split('-').map(Number);
+  const [yb, mb] = to.split('-').map(Number);
+  const n = (yb - ya) * 12 + (mb - ma);
+  return n === 1 ? '1 mês' : `${n} meses`;
+}
+
+function Step({ label, value, color, bold }: { label: string; value: number; color?: string; bold?: boolean }) {
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+      <Text style={{ color: colors.text, fontSize: 13, fontWeight: bold ? '700' : '400', flexShrink: 1 }}>{label}</Text>
+      <Text style={{ color: color ?? colors.text, fontSize: 13, fontWeight: bold ? '800' : '600' }}>{money(value)}</Text>
     </View>
   );
 }
