@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Text } from 'react-native';
 import type { Kind, Recurrence, Transaction } from '../lib/types';
 import { dateBR, monthBR, moneyInput, parseDateBR, parseMoney, parseMonthBR, todayISO } from '../lib/format';
-import { Button, ErrorText, Field, Segmented } from './ui';
+import { Button, Chip, ErrorText, Field, Muted, Row, Segmented } from './ui';
+import { useData } from '../context/DataContext';
 import { colors } from './theme';
 
 export type TxInput = Omit<Transaction, 'id'>;
@@ -19,6 +20,8 @@ export function TransactionForm({
   const [date, setDate] = useState(dateBR(d0));
   const [start, setStart] = useState(monthBR(d0));
   const [end, setEnd] = useState(initial?.end_date ? monthBR(initial.end_date) : '');
+  const { goals } = useData();
+  const [goalId, setGoalId] = useState<string | null>(initial?.goal_id ?? null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -45,6 +48,7 @@ export function TransactionForm({
       await onSubmit({
         kind, recurrence, description: description.trim().slice(0, 120),
         category: category.trim() ? category.trim().slice(0, 60) : null, amount: value, date: d, end_date: e,
+        goal_id: kind === 'income' && recurrence === 'one_time' ? goalId : null,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar');
@@ -68,6 +72,15 @@ export function TransactionForm({
         <>
           <Field label="A partir de" value={start} onChangeText={setStart} placeholder="MM/AAAA" keyboardType="numbers-and-punctuation" />
           <Field label="Até (opcional)" value={end} onChangeText={setEnd} placeholder="MM/AAAA — vazio = sem fim" keyboardType="numbers-and-punctuation" />
+        </>
+      )}
+      {kind === 'income' && recurrence === 'one_time' && goals.length > 0 && (
+        <>
+          <Muted style={{ marginBottom: 6 }}>Contar para a meta?</Muted>
+          <Row style={{ flexWrap: 'wrap', marginBottom: 12 }}>
+            <Chip label="Não" active={goalId == null} onPress={() => setGoalId(null)} color={colors.muted} />
+            {goals.map((g) => <Chip key={g.id} label={g.name} active={goalId === g.id} onPress={() => setGoalId(g.id)} />)}
+          </Row>
         </>
       )}
       <Field label="Categoria (opcional)" value={category} onChangeText={setCategory} maxLength={60} />

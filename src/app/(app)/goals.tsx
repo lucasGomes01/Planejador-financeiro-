@@ -10,13 +10,13 @@ import { Progress } from '../../components/Progress';
 import { colors } from '../../components/theme';
 
 export default function Goals() {
-  const { goals, investments, balances, settings, addGoal } = useData();
+  const { goals, investments, balances, settings, transactions, snapshots, addGoal } = useData();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['left', 'right']}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
         <View style={{ width: '100%', maxWidth: 820, alignSelf: 'center' }}>
           {goals.map((g) => {
-            const st = goalStatus(g, investments, balances, settings.cdi_annual_rate);
+            const st = goalStatus(g, investments, balances, settings.cdi_annual_rate, transactions, snapshots);
             return (
               <Pressable key={g.id} onPress={() => router.push(`/goal/${g.id}`)}>
                 <Card>

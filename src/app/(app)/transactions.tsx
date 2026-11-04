@@ -66,6 +66,8 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
 }
 
 function Item({ t }: { t: Transaction }) {
+  const { goals } = useData();
+  const goal = t.goal_id ? goals.find((g) => g.id === t.goal_id)?.name : null;
   const sub = t.recurrence === 'fixed'
     ? `desde ${monthBR(t.date)}${t.end_date ? ` até ${monthBR(t.end_date)}` : ''}`
     : dateBR(t.date);
@@ -74,7 +76,7 @@ function Item({ t }: { t: Transaction }) {
       style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
       <View style={{ flex: 1, paddingRight: 8 }}>
         <Text style={{ fontWeight: '600', color: colors.text }}>{t.description}</Text>
-        <Text style={{ color: colors.muted, fontSize: 12 }}>{[t.category, sub].filter(Boolean).join(' · ')}</Text>
+        <Text style={{ color: colors.muted, fontSize: 12 }}>{[t.category, sub, goal ? `→ ${goal}` : null].filter(Boolean).join(' · ')}</Text>
       </View>
       <Text style={{ fontWeight: '700', color: t.kind === 'income' ? colors.income : colors.expense }}>
         {t.kind === 'income' ? '+' : '−'} {money(t.amount)}

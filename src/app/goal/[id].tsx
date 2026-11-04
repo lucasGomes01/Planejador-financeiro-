@@ -6,7 +6,8 @@ import { confirm } from '../../lib/confirm';
 import { goalStatus } from '../../lib/goals';
 import { addMonths, currentYM } from '../../lib/finance';
 import { money, monthLong } from '../../lib/format';
-import { typeColor } from '../../lib/types';
+import { rateLabel, typeColor } from '../../lib/types';
+import { dateBR } from '../../lib/format';
 import { GoalForm } from '../../components/GoalForm';
 import { LineChart } from '../../components/LineChart';
 import { Progress } from '../../components/Progress';
@@ -15,11 +16,11 @@ import { colors } from '../../components/theme';
 
 export default function GoalDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { goals, investments, balances, settings, updateGoal, deleteGoal, updateInvestment } = useData();
+  const { goals, investments, balances, settings, transactions, snapshots, updateGoal, deleteGoal, updateInvestment } = useData();
   const [tab, setTab] = useState<'overview' | 'edit'>('overview');
   const goal = goals.find((g) => g.id === id);
-  const st = useMemo(() => goal && goalStatus(goal, investments, balances, settings.cdi_annual_rate),
-    [goal, investments, balances, settings]);
+  const st = useMemo(() => goal && goalStatus(goal, investments, balances, settings.cdi_annual_rate, transactions, snapshots),
+    [goal, investments, balances, settings, transactions, snapshots]);
   if (!goal || !st) return <Screen><Empty>Meta não encontrada.</Empty></Screen>;
 
   const path = st.path.slice(0, 61).map((value, i) => ({ ym: addMonths(currentYM(), i), value, projected: i > 0 }));
@@ -34,6 +35,12 @@ export default function GoalDetail() {
             <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text }}>{money(st.saved)}</Text>
             <Muted>de {money(goal.target_amount)} · faltam {money(Math.max(0, goal.target_amount - st.saved))}</Muted>
             <Progress value={st.progress} />
+            {st.pending > 0 ? (
+              <Muted>Inclui {money(st.pending)} de ganhos pontuais ainda não lançados em um saldo.</Muted>
+            ) : null}
+            {st.future > 0 ? (
+              <Muted>+ {money(st.future)} em ganhos pontuais futuros entram na previsão.</Muted>
+            ) : null}
             <Muted>Rendimento estimado: {money(st.monthlyYield)}/mês · aporte planejado: {money(goal.monthly_contribution)}/mês</Muted>
             <Muted style={{ marginTop: 4 }}>
               {st.months === 0 ? 'Meta atingida! 🎉'
@@ -54,6 +61,26 @@ export default function GoalDetail() {
             </Card>
           )}
 
+          {st.pendingItems.length + st.futureItems.length > 0 && (
+            <Card>
+              <Subtitle>Ganhos pontuais destinados</Subtitle>
+              {[...st.pendingItems, ...st.futureItems].map((t) => (
+                <Pressable key={t.id} onPress={() => router.push(`/transaction/${t.id}`)}>
+                  <Row style={{ justifyContent: 'space-between', paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: '600' }}>{t.description}</Text>
+                      <Text style={{ color: colors.muted, fontSize: 12 }}>
+                        {dateBR(t.date)} · {st.futureItems.includes(t) ? 'previsto' : 'a depositar'}
+                      </Text>
+                    </View>
+                    <Text style={{ fontWeight: '700', color: colors.income }}>+ {money(t.amount)}</Text>
+                  </Row>
+                </Pressable>
+              ))}
+              <Muted style={{ marginTop: 6 }}>Ao atualizar o saldo de um local da meta, os ganhos já recebidos passam a contar pelo saldo.</Muted>
+            </Card>
+          )}
+
           <Card>
             <Subtitle>Onde está o dinheiro da meta</Subtitle>
             {st.parts.length === 0 && <Empty>Nenhum local vinculado. Toque nos locais abaixo para vincular.</Empty>}
@@ -63,8 +90,7 @@ export default function GoalDetail() {
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontWeight: '600' }}>{p.inv.name}</Text>
                     <Text style={{ color: colors.muted, fontSize: 12 }}>
-                      {p.inv.cdi_percent != null ? `${String(p.inv.cdi_percent).replace('.', ',')}% CDI` : 'sem CDI'}
-                      {' · '}~{money(p.value * p.rate)}/mês
+                      {rateLabel(p.inv) ?? 'sem CDI'}{' · '}~{money(p.yield)}/mês
                     </Text>
                   </View>
                   <Text style={{ fontWeight: '700' }}>{money(p.value)}</Text>

@@ -58,11 +58,36 @@ export function totalOf(balances: Map<string, number>, ids: Iterable<string>) {
   return total;
 }
 
-/** Monthly rate for an investment given the annual CDI (e.g. 14.9) and % of CDI (e.g. 105). */
+/** Monthly rate given the annual CDI (e.g. 14.9) and % of CDI (e.g. 105). */
 export const monthlyRate = (cdiAnnual: number, cdiPercent: number | null) =>
   cdiPercent == null ? 0 : Math.pow(1 + (cdiAnnual / 100) * (cdiPercent / 100), 1 / 12) - 1;
 
+type RateInfo = Pick<Investment, 'cdi_percent' | 'cdi_limit' | 'cdi_percent_above'>;
+
+/**
+ * Estimated yield for one month on `value`.
+ * Supports tiers: cdi_percent up to cdi_limit, cdi_percent_above on the rest.
+ */
+export function monthlyYield(cdiAnnual: number, inv: RateInfo, value: number): number {
+  if (inv.cdi_percent == null || value <= 0) return 0;
+  const r1 = monthlyRate(cdiAnnual, inv.cdi_percent);
+  if (inv.cdi_limit == null) return value * r1;
+  const r2 = monthlyRate(cdiAnnual, inv.cdi_percent_above ?? 100);
+  return Math.min(value, inv.cdi_limit) * r1 + Math.max(0, value - inv.cdi_limit) * r2;
+}
+
 export interface SeriesPoint { ym: string; value: number; projected?: boolean }
+
+/** A holding being simulated month by month. */
+export interface Holding { value: number; inv: RateInfo }
+
+const totalYield = (hs: Holding[], cdi: number) => hs.reduce((s, h) => s + monthlyYield(cdi, h.inv, h.value), 0);
+const avgRateOf = (hs: Holding[], cdi: number) => {
+  const total = hs.reduce((s, h) => s + h.value, 0);
+  if (total > 0) return totalYield(hs, cdi) / total;
+  // nothing saved yet: use the first-tier rate of the first holding
+  return hs[0] ? monthlyRate(cdi, hs[0].inv.cdi_percent) : 0;
+};
 
 /**
  * Total balance per month of the selected investments.
@@ -92,45 +117,61 @@ export function balanceSeries(opts: {
 
   if (monthsAhead > 0) {
     const bal = balancesAt(snaps);
-    const per = investments
+    const hs: Holding[] = investments
       .filter((inv) => selected.has(inv.id))
-      .map((inv) => ({ value: bal.get(inv.id) ?? 0, rate: monthlyRate(cdiAnnual, inv.cdi_percent) }));
-    const totalNow = per.reduce((s, p) => s + p.value, 0);
-    const avgRate = totalNow > 0 ? per.reduce((s, p) => s + p.value * p.rate, 0) / totalNow : 0;
+      .map((inv) => ({ value: bal.get(inv.id) ?? 0, inv }));
+    const avgRate = avgRateOf(hs, cdiAnnual);
     let extra = 0; // contributions from planned net, growing at the average rate
     for (let i = 1; i <= monthsAhead; i++) {
       const ym = addMonths(now, i);
-      for (const p of per) p.value *= 1 + p.rate;
+      for (const h of hs) h.value += monthlyYield(cdiAnnual, h.inv, h.value);
       if (opts.includeNetInProjection) {
         extra = extra * (1 + avgRate) + monthSummary(opts.transactions, ym).net;
       }
-      points.push({ ym, value: per.reduce((s, p) => s + p.value, 0) + extra, projected: true });
+      points.push({ ym, value: hs.reduce((s, h) => s + h.value, 0) + extra, projected: true });
     }
   }
   return points;
 }
 
-/** Simulates a goal: how many months until `target` is reached. */
+/**
+ * Simulates a goal month by month.
+ * - holdings grow with their own (possibly tiered) CDI yield;
+ * - `startExtra` is money already earmarked but not yet in the holdings;
+ * - `lumps[i]` is a one-time amount arriving in month i (1 = next month);
+ * - contributions grow at the holdings' average rate.
+ */
 export function goalProjection(opts: {
-  current: { value: number; rate: number }[];
+  holdings: Holding[];
+  cdiAnnual: number;
   monthlyContribution: number;
   target: number;
+  startExtra?: number;
+  lumps?: Map<number, number>;
   maxMonths?: number;
 }) {
-  const per = opts.current.map((c) => ({ ...c }));
-  const total0 = per.reduce((s, p) => s + p.value, 0);
-  const avgRate = total0 > 0 ? per.reduce((s, p) => s + p.value * p.rate, 0) / total0 : per[0]?.rate ?? 0;
-  let contrib = 0;
+  const hs = opts.holdings.map((h) => ({ ...h }));
+  const cdi = opts.cdiAnnual;
+  const avgRate = avgRateOf(hs, cdi);
+  const monthlyYieldNow = totalYield(hs, cdi);
+  let contrib = opts.startExtra ?? 0;
+  const total0 = hs.reduce((s, h) => s + h.value, 0) + contrib;
   const path: number[] = [total0];
   const max = opts.maxMonths ?? 600;
   let months: number | null = total0 >= opts.target ? 0 : null;
   for (let i = 1; i <= max && months == null; i++) {
-    for (const p of per) p.value *= 1 + p.rate;
-    contrib = contrib * (1 + avgRate) + opts.monthlyContribution;
-    const total = per.reduce((s, p) => s + p.value, 0) + contrib;
+    for (const h of hs) h.value += monthlyYield(cdi, h.inv, h.value);
+    contrib = contrib * (1 + avgRate) + opts.monthlyContribution + (opts.lumps?.get(i) ?? 0);
+    const total = hs.reduce((s, h) => s + h.value, 0) + contrib;
     path.push(total);
     if (total >= opts.target) months = i;
   }
-  const monthlyYield = per.length ? opts.current.reduce((s, c) => s + c.value * c.rate, 0) : 0;
-  return { months, path, monthlyYield, avgRate };
+  return { months, path, monthlyYield: monthlyYieldNow, avgRate };
+}
+
+/** Value of the holdings after n months of yield only. */
+export function growHoldings(holdings: Holding[], cdiAnnual: number, n: number) {
+  const hs = holdings.map((h) => ({ ...h }));
+  for (let i = 0; i < n; i++) for (const h of hs) h.value += monthlyYield(cdiAnnual, h.inv, h.value);
+  return hs.reduce((s, h) => s + h.value, 0);
 }

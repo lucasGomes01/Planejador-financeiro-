@@ -2,9 +2,9 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useData } from '../../context/DataContext';
-import { monthlyRate } from '../../lib/finance';
+import { monthlyYield } from '../../lib/finance';
 import { money } from '../../lib/format';
-import { INVESTMENT_TYPES, type Investment } from '../../lib/types';
+import { INVESTMENT_TYPES, rateLabel, type Investment } from '../../lib/types';
 import { Button, Card, Empty, Muted, Row, Subtitle } from '../../components/ui';
 import { Fab } from '../../components/Fab';
 import { colors } from '../../components/theme';
@@ -12,8 +12,8 @@ import { colors } from '../../components/theme';
 export default function Investments() {
   const { investments, balances, settings, goals } = useData();
   const total = investments.reduce((s, i) => s + (balances.get(i.id) ?? 0), 0);
-  const monthlyYield = investments.reduce(
-    (s, i) => s + (balances.get(i.id) ?? 0) * monthlyRate(settings.cdi_annual_rate, i.cdi_percent), 0);
+  const totalYield = investments.reduce(
+    (s, i) => s + monthlyYield(settings.cdi_annual_rate, i, balances.get(i.id) ?? 0), 0);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['left', 'right']}>
@@ -22,7 +22,7 @@ export default function Investments() {
           <Card>
             <Muted>Total guardado</Muted>
             <Text style={{ fontSize: 26, fontWeight: '800', color: colors.text }}>{money(total)}</Text>
-            <Muted>Rendimento estimado: {money(monthlyYield)}/mês (CDI {String(settings.cdi_annual_rate).replace('.', ',')}% a.a.)</Muted>
+            <Muted>Rendimento estimado: {money(totalYield)}/mês (CDI {String(settings.cdi_annual_rate).replace('.', ',')}% a.a.)</Muted>
             <View style={{ height: 12 }} />
             <Row>
               <View style={{ flex: 1 }}><Button small title="Atualizar saldo" variant="secondary" onPress={() => router.push({ pathname: '/add', params: { mode: 'balance' } })} /></View>
@@ -52,7 +52,7 @@ export default function Investments() {
 }
 
 function Item({ i, value, goal }: { i: Investment; value: number; goal?: string }) {
-  const details = [i.institution, i.cdi_percent != null ? `${String(i.cdi_percent).replace('.', ',')}% CDI` : null, goal ? `Meta: ${goal}` : null]
+  const details = [i.institution, rateLabel(i), goal ? `Meta: ${goal}` : null]
     .filter(Boolean).join(' · ');
   return (
     <Pressable onPress={() => router.push(`/investment/${i.id}`)}
