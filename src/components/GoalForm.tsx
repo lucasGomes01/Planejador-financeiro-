@@ -46,7 +46,7 @@ export function GoalForm({ initial, onSubmit, submitLabel = 'Salvar' }: {
         options={[{ value: 'fixed', label: 'Valor fixo' }, { value: 'surplus', label: 'Sobra do mês' }]} />
       {mode === 'fixed' ? (
         <Field label="Aporte mensal planejado (R$)" value={monthly} onChangeText={setMonthly} keyboardType="decimal-pad" placeholder="0,00"
-          hint="Valor fixo por mês. Não considera seus ganhos e custos lançados." />
+          hint="Valor por mês, limitado à sobra do mês (ganhos − custos). Mês negativo tira da meta." />
       ) : (
         <Field label="% da sobra que vai para a meta" value={pct} onChangeText={setPct} keyboardType="decimal-pad"
           hint="Sobra = ganhos − custos fixos − custos pontuais de cada mês. Mês com sobra negativa tira da meta." />

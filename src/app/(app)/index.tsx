@@ -120,7 +120,7 @@ export default function Dashboard() {
                 {goal
                   ? goal.contribution_mode === 'surplus'
                     ? ` + ${String(goal.surplus_percent).replace('.', ',')}% da sobra de cada mês (ganhos − custos fixos e pontuais) + ganhos pontuais destinados à meta.`
-                    : ` + aporte fixo da meta (${money(goal.monthly_contribution)}/mês) + ganhos pontuais destinados a ela.`
+                    : ` + aporte fixo da meta (${money(goal.monthly_contribution)}/mês, limitado à sobra do mês) + ganhos pontuais destinados a ela.`
                   : ' + sobra mensal prevista (ganhos − custos).'}
               </Muted>
             ) : null}

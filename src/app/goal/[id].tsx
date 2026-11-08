@@ -51,7 +51,7 @@ export default function GoalDetail() {
             <Muted>
               {st.surplusMode
                 ? `Entra por mês: ${String(goal.surplus_percent).replace('.', ',')}% da sobra (ganhos − custos fixos e pontuais). Próximo mês: ${money(st.nextBase)} · média 12 meses: ${money(st.avgBase)}`
-                : `Entra por mês: ${money(goal.monthly_contribution)} (valor fixo — não considera ganhos e custos lançados)`}
+                : `Entra por mês: ${money(goal.monthly_contribution)}, limitado à sobra do mês. Próximo mês: ${money(st.nextBase)} · média 12 meses: ${money(st.avgBase)}`}
             </Muted>
             <Muted style={{ marginTop: 4 }}>
               {st.months === 0 ? 'Meta atingida! 🎉'

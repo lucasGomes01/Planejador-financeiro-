@@ -7,7 +7,8 @@ import { money, monthShort as monthLabel, todayISO } from './format';
  *
  * Every future month i (1 = next month) the goal receives:
  * - base part:
- *   - mode 'fixed'   → goal.monthly_contribution
+ *   - mode 'fixed'   → goal.monthly_contribution, capped by the month's surplus
+ *                      (a month that closes negative withdraws from the goal)
  *   - mode 'surplus' → surplus of month i itself (income − fixed and one-time expenses,
  *                      not counting incomes earmarked for any goal) × surplus_percent.
  *                      Each chart point is the balance at the END of its month. The current
@@ -55,10 +56,12 @@ export function goalStatus(
   const surplusMode = goal.contribution_mode === 'surplus';
   const pct = (goal.surplus_percent ?? 100) / 100;
   /** base part entering in month i */
+  /** surplus available in month i (month 1 also gets the current, unfinished month) */
+  const surplusAt = (i: number) => freeSurplus(addMonths(now, i)) + (i === 1 ? freeSurplus(now) : 0);
   const baseAt = (i: number) => {
-    if (!surplusMode) return goal.monthly_contribution;
-    const own = freeSurplus(addMonths(now, i));
-    return (i === 1 ? own + freeSurplus(now) : own) * pct;
+    const avail = surplusAt(i);
+    // fixed: the planned amount, but never more than what was left that month (a negative month withdraws)
+    return surplusMode ? avail * pct : Math.min(goal.monthly_contribution, avail);
   };
   const contributionAt = (i: number) => baseAt(i) + (lumps.get(i) ?? 0);
 
@@ -103,7 +106,22 @@ export function goalStatus(
         }
       }
     } else {
-      out.push({ label: 'Aporte fixo da meta', value: goal.monthly_contribution, hint: 'Valor fixo: não considera ganhos e custos lançados.' });
+      const avail = surplusAt(i);
+      if (avail >= goal.monthly_contribution) {
+        out.push({
+          label: 'Aporte fixo da meta', value: goal.monthly_contribution,
+          hint: `A sobra do mês (${money(avail)}) cobre o aporte.`,
+        });
+      } else {
+        // capped: show what actually happened in the month(s)
+        const months = i === 1 ? [now, ym] : [ym];
+        for (const m of months) {
+          const sum = monthSummary(transactions, m);
+          const earmarkedIn = sum.items.filter((t) => t.goal_id && t.kind === 'income').reduce((a, t) => a + t.amount, 0);
+          out.push(...surplusLines(transactions, m, `${monthLabel(m)}${m === now ? ' (mês atual)' : ''}`, earmarkedIn).lines);
+        }
+        if (out.length) out[out.length - 1].hint = [out[out.length - 1].hint, `Sobra menor que o aporte fixo (${money(goal.monthly_contribution)}): entra só a sobra.`].filter(Boolean).join(' · ');
+      }
     }
     const lump = lumps.get(i);
     if (lump) out.push({ label: 'Ganhos pontuais destinados', value: lump });
