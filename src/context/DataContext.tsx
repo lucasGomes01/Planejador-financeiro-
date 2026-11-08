@@ -71,7 +71,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setTransactions(num(check(tx) as Transaction[], ['amount']));
       setInvestments(num(check(inv) as Investment[], ['cdi_percent', 'cdi_limit', 'cdi_percent_above']));
       setSnapshots(num(check(snap) as Snapshot[], ['amount']));
-      setGoals(num(check(gl) as Goal[], ['target_amount', 'monthly_contribution']));
+      setGoals(num(check(gl) as Goal[], ['target_amount', 'monthly_contribution', 'surplus_percent']));
       const s = check(st) as Settings | null;
       setSettings(s ? { cdi_annual_rate: Number(s.cdi_annual_rate) } : DEFAULT_SETTINGS);
     } catch (e) {

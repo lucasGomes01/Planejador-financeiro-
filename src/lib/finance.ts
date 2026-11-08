@@ -159,16 +159,15 @@ export function balanceSeries(opts: {
  * Simulates a goal month by month.
  * - holdings grow with their own (possibly tiered) CDI yield;
  * - `startExtra` is money already earmarked but not yet in the holdings;
- * - `lumps[i]` is a one-time amount arriving in month i (1 = next month);
+ * - `contributionAt(i)` is what enters in month i (1 = next month);
  * - contributions grow at the holdings' average rate.
  */
 export function goalProjection(opts: {
   holdings: Holding[];
   cdiAnnual: number;
-  monthlyContribution: number;
+  contributionAt: (i: number) => number;
   target: number;
   startExtra?: number;
-  lumps?: Map<number, number>;
   maxMonths?: number;
 }) {
   const hs = opts.holdings.map((h) => ({ ...h }));
@@ -182,7 +181,7 @@ export function goalProjection(opts: {
   let months: number | null = total0 >= opts.target ? 0 : null;
   for (let i = 1; i <= max && months == null; i++) {
     for (const h of hs) h.value += monthlyYield(cdi, h.inv, h.value);
-    contrib = contrib * (1 + avgRate) + opts.monthlyContribution + (opts.lumps?.get(i) ?? 0);
+    contrib = contrib * (1 + avgRate) + opts.contributionAt(i);
     const total = hs.reduce((s, h) => s + h.value, 0) + contrib;
     path.push(total);
     if (total >= opts.target) months = i;

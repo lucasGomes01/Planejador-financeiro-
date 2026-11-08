@@ -21,6 +21,9 @@ export interface Goal {
   target_amount: number;
   target_date: string | null;
   monthly_contribution: number;
+  /** 'fixed' = monthly_contribution; 'surplus' = month's income − expenses × surplus_percent */
+  contribution_mode: 'fixed' | 'surplus';
+  surplus_percent: number;
 }
 
 export interface Investment {

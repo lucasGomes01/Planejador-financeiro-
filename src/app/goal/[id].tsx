@@ -45,7 +45,12 @@ export default function GoalDetail() {
             {st.future > 0 ? (
               <Muted>+ {money(st.future)} em ganhos pontuais futuros entram na previsão.</Muted>
             ) : null}
-            <Muted>Rendimento estimado: {money(st.monthlyYield)}/mês · aporte planejado: {money(goal.monthly_contribution)}/mês</Muted>
+            <Muted>Rendimento estimado: {money(st.monthlyYield)}/mês</Muted>
+            <Muted>
+              {st.surplusMode
+                ? `Entra por mês: ${String(goal.surplus_percent).replace('.', ',')}% da sobra (ganhos − custos fixos e pontuais). Próximo mês: ${money(st.nextBase)} · média 12 meses: ${money(st.avgBase)}`
+                : `Entra por mês: ${money(goal.monthly_contribution)} (valor fixo — não considera ganhos e custos lançados)`}
+            </Muted>
             <Muted style={{ marginTop: 4 }}>
               {st.months === 0 ? 'Meta atingida! 🎉'
                 : st.reachYM ? `Com esse ritmo você chega lá em ${monthLong(st.reachYM)} (${st.months} meses).`
@@ -53,7 +58,7 @@ export default function GoalDetail() {
             </Muted>
             {st.neededMonthly != null && goal.target_date ? (
               <Muted style={{ marginTop: 4 }}>
-                Para atingir em {monthLong(goal.target_date.slice(0, 7))}: aporte de {money(st.neededMonthly)}/mês.
+                Para atingir em {monthLong(goal.target_date.slice(0, 7))}: precisa entrar {money(st.neededMonthly)}/mês.
               </Muted>
             ) : null}
           </Card>

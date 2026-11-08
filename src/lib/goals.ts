@@ -1,15 +1,22 @@
 import type { Goal, Investment, Snapshot, Transaction } from './types';
-import { addMonths, currentYM, goalProjection, growHoldings, monthlyYield, monthsBetween, ymOf } from './finance';
+import { addMonths, currentYM, goalProjection, growHoldings, monthSummary, monthlyYield, monthsBetween, ymOf } from './finance';
 import { todayISO } from './format';
 
 /**
  * Progress and projection of a goal.
  *
- * One-time incomes earmarked for the goal:
- * - dated after the last balance update of the goal's places (and up to today) are counted as
- *   "a depositar" — money received but not yet reflected in a balance;
- * - dated in the future are added to the projection in their month;
- * - older ones are assumed to be already inside the updated balances.
+ * Every future month i (1 = next month) the goal receives:
+ * - base part:
+ *   - mode 'fixed'   → goal.monthly_contribution
+ *   - mode 'surplus' → surplus of the PREVIOUS month (income − fixed and one-time expenses,
+ *                      not counting incomes earmarked for any goal) × surplus_percent.
+ *                      The surplus of a month is assumed to be saved at its end, so the
+ *                      current month's surplus enters next month.
+ * - plus one-time incomes earmarked for this goal:
+ *   - dated after the last balance update of the goal's places (and up to today) count now,
+ *     as "a depositar" (received but not yet inside a balance);
+ *   - dated in the future enter in their month (this month → next month);
+ *   - older ones are assumed to be already inside the updated balances.
  */
 export function goalStatus(
   goal: Goal, investments: Investment[], balances: Map<string, number>, cdiAnnual: number,
@@ -32,20 +39,33 @@ export function goalStatus(
   const pending = pendingItems.reduce((s, t) => s + t.amount, 0);
   const lumps = new Map<number, number>();
   for (const t of futureItems) {
-    // still this month → counts next month in the simulation
     const i = Math.max(1, monthsBetween(now, ymOf(t.date)));
     lumps.set(i, (lumps.get(i) ?? 0) + t.amount);
   }
   const future = futureItems.reduce((s, t) => s + t.amount, 0);
 
+  /** Month's surplus without incomes earmarked for goals (those are counted separately). */
+  const freeSurplus = (ym: string) => {
+    const sum = monthSummary(transactions, ym);
+    const earmarkedIn = sum.items
+      .filter((t) => t.goal_id && t.kind === 'income')
+      .reduce((s, t) => s + t.amount, 0);
+    return sum.net - earmarkedIn;
+  };
+  const surplusMode = goal.contribution_mode === 'surplus';
+  const pct = (goal.surplus_percent ?? 100) / 100;
+  /** base part entering in month i */
+  const baseAt = (i: number) => (surplusMode ? freeSurplus(addMonths(now, i - 1)) * pct : goal.monthly_contribution);
+  const contributionAt = (i: number) => baseAt(i) + (lumps.get(i) ?? 0);
+
   const saved = inAccounts + pending;
   const holdings = parts.map((p) => ({ value: p.value, inv: p.inv }));
   const proj = goalProjection({
-    holdings, cdiAnnual, monthlyContribution: goal.monthly_contribution, target: goal.target_amount,
-    startExtra: pending, lumps,
+    holdings, cdiAnnual, contributionAt, target: goal.target_amount, startExtra: pending,
   });
   const reachYM = proj.months != null ? addMonths(now, proj.months) : null;
 
+  /** How much per month you'd need to save to hit target_date (on top of yield + earmarked incomes). */
   let neededMonthly: number | null = null;
   if (goal.target_date) {
     const n = monthsBetween(now, goal.target_date.slice(0, 7));
@@ -57,12 +77,17 @@ export function goalStatus(
       neededMonthly = missing <= 0 ? 0 : r > 0 ? (missing * r) / (Math.pow(1 + r, n) - 1) : missing / n;
     }
   }
-  const lumpsByYM = new Map<string, number>();
-  for (const [i, v] of lumps) lumpsByYM.set(addMonths(now, i), v);
-  /** What enters the goal in a given future month: planned contribution + earmarked incomes. */
-  const contribution = (ym: string) => goal.monthly_contribution + (lumpsByYM.get(ym) ?? 0);
+
+  /** Average base contribution over the next 12 months (useful in surplus mode). */
+  let base12 = 0;
+  for (let i = 1; i <= 12; i++) base12 += baseAt(i);
+  const avgBase = base12 / 12;
+
+  /** What enters the goal in a given future month (for charts). */
+  const contribution = (ym: string) => contributionAt(monthsBetween(now, ym));
+
   return {
-    contribution, linkedIds,
+    contribution, linkedIds, avgBase, nextBase: baseAt(1), surplusMode,
     parts, inAccounts, pending, pendingItems, future, futureItems, saved,
     progress: Math.min(1, saved / goal.target_amount),
     monthlyYield: proj.monthlyYield, months: proj.months, reachYM, path: proj.path, neededMonthly,

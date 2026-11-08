@@ -34,7 +34,7 @@ App de planejamento financeiro pessoal que roda **na web** e no **Android (APK)*
 ### 1. Supabase
 
 1. Crie um projeto em <https://supabase.com>.
-2. Em **SQL Editor**, rode, em ordem, todos os arquivos de `supabase/migrations/` (`0001_…`, `0002_…`, `0003_…`)
+2. Em **SQL Editor**, rode, em ordem, todos os arquivos de `supabase/migrations/` (`0001_…` a `0004_…`)
    (ou `supabase db push` com a CLI).
 3. Em **Authentication → Providers → Email**: mantenha **Confirm email** ligado.
 4. Em **Authentication → Policies/Settings** (recomendado):

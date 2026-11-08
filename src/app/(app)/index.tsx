@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useData } from '../../context/DataContext';
-import { balanceSeries, currentYM, monthSummary } from '../../lib/finance';
+import { addMonths, balanceSeries, currentYM, monthSummary } from '../../lib/finance';
 import { goalStatus } from '../../lib/goals';
 import { money, monthLong } from '../../lib/format';
 import { INVESTMENT_TYPES, typeColor, type InvestmentType } from '../../lib/types';
@@ -35,7 +35,8 @@ export default function Dashboard() {
   const series = useMemo(() => balanceSeries({
     snapshots, investments, selected, monthsBack: Number(range) - 1, monthsAhead: projection ? 12 : 0,
     cdiAnnual: settings.cdi_annual_rate,
-    contribution: goalSt ? goalSt.contribution : (ym) => monthSummary(transactions, ym).net,
+    // a month's surplus is saved at its end → enters the following month
+    contribution: goalSt ? goalSt.contribution : (ym) => monthSummary(transactions, addMonths(ym, -1)).net,
     startExtra: goalSt ? goalSt.pending : 0,
   }), [snapshots, investments, selected, range, projection, settings, transactions, goalSt]);
 
@@ -107,7 +108,9 @@ export default function Dashboard() {
               <Muted style={{ marginTop: 10 }}>
                 Linha tracejada: rendimento pelo CDI ({String(settings.cdi_annual_rate).replace('.', ',')}% a.a.)
                 {goal
-                  ? ` + aporte mensal da meta (${money(goal.monthly_contribution)}) + ganhos pontuais destinados a ela.`
+                  ? goal.contribution_mode === 'surplus'
+                    ? ` + ${String(goal.surplus_percent).replace('.', ',')}% da sobra de cada mês (ganhos − custos fixos e pontuais) + ganhos pontuais destinados à meta.`
+                    : ` + aporte fixo da meta (${money(goal.monthly_contribution)}/mês) + ganhos pontuais destinados a ela.`
                   : ' + sobra mensal prevista (ganhos − custos).'}
               </Muted>
             ) : null}
