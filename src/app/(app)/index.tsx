@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useData } from '../../context/DataContext';
 import { addMonths, balanceSeries, currentYM, monthSummary } from '../../lib/finance';
 import { goalStatus } from '../../lib/goals';
-import { money, monthLong } from '../../lib/format';
+import { money, monthLong, monthShort } from '../../lib/format';
 import { INVESTMENT_TYPES, typeColor, type InvestmentType } from '../../lib/types';
 import { LineChart } from '../../components/LineChart';
 import { Card, Chip, ErrorText, Muted, Row, Segmented, Subtitle } from '../../components/ui';
@@ -74,7 +74,15 @@ export default function Dashboard() {
               </Row>
             )}
             <LineChart data={series} cdiLabel={`${String(settings.cdi_annual_rate).replace('.', ',')}%`}
-              contribLabel={goal ? 'Aportes da meta' : 'Sobra mensal prevista'} />
+              contribLabel={goal ? 'Aportes da meta' : 'Sobra mensal prevista'}
+              monthDetail={goalSt ? goalSt.detailAt : (ym) => {
+                const prev = addMonths(ym, -1);
+                const m = monthSummary(transactions, prev);
+                return [{
+                  label: `Sobra de ${monthShort(prev)}`, value: m.net,
+                  hint: `ganhos ${money(m.income)} − custos ${money(m.expense)} (fixos ${money(m.fixedExpense)} + pontuais ${money(m.oneTimeExpense)})`,
+                }];
+              }} />
             <Segmented<Range> value={range} onChange={setRange}
               options={[{ value: '6', label: '6 meses' }, { value: '12', label: '1 ano' }, { value: '24', label: '2 anos' }]} />
             <Row style={{ flexWrap: 'wrap', marginBottom: 8 }}>

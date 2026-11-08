@@ -67,7 +67,7 @@ export default function GoalDetail() {
             <Card>
               <Subtitle>Projeção</Subtitle>
               <LineChart data={path} cdiLabel={`${String(settings.cdi_annual_rate).replace('.', ',')}%`}
-                contribLabel="Aportes da meta" />
+                contribLabel="Aportes da meta" monthDetail={st.detailAt} />
             </Card>
           )}
 

@@ -9,8 +9,10 @@ const H = 220;
 const PAD = { l: 56, r: 22, t: 12, b: 28 };
 
 export function LineChart({
-  data, color = colors.primary, contribLabel = 'Aportes', cdiLabel,
+  data, color = colors.primary, contribLabel = 'Aportes', cdiLabel, monthDetail,
 }: {
+  /** what entered/left in a projected month besides yield (e.g. previous month's surplus) */
+  monthDetail?: (ym: string) => { label: string; value: number; hint?: string }[];
   data: SeriesPoint[];
   color?: string;
   /** what the contributions are, e.g. "Sobra mensal prevista" */
@@ -60,6 +62,29 @@ export function LineChart({
               <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 2 }} />
               <Step label="= Total previsto" value={s.value} bold />
             </View>
+            {sel != null && monthDetail ? (() => {
+              const prev = data[sel - 1];
+              const monthYield = s.gainYield - (prev?.gainYield ?? 0);
+              const lines = monthDetail(s.ym);
+              const change = s.value - (prev?.value ?? s.value);
+              return (
+                <View style={{ backgroundColor: colors.bg, borderRadius: 10, padding: 10, marginTop: 6, gap: 3 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>
+                    De {prev ? monthShort(prev.ym) : ''} para {monthShort(s.ym)}
+                  </Text>
+                  <Step label="+ Juros do mês" value={monthYield} color={colors.income} />
+                  {lines.map((l, k) => (
+                    <View key={k}>
+                      <Step label={`${l.value < 0 ? '−' : '+'} ${l.label}`} value={Math.abs(l.value)}
+                        color={l.value < 0 ? colors.expense : colors.income} />
+                      {l.hint ? <Text style={{ color: colors.muted, fontSize: 11 }}>{l.hint}</Text> : null}
+                    </View>
+                  ))}
+                  <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 2 }} />
+                  <Step label={change >= 0 ? '= Aumento no mês' : '= Redução no mês'} value={Math.abs(change)} bold />
+                </View>
+              );
+            })() : null}
             <Text style={{ color: colors.muted, fontSize: 11, marginTop: 4 }}>
               Juros brutos (antes do IR){cdiLabel ? `, com CDI de ${cdiLabel} ao ano` : ''}. Ações e locais sem % do CDI não rendem na previsão.
             </Text>

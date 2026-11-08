@@ -1,6 +1,6 @@
 import type { Goal, Investment, Snapshot, Transaction } from './types';
 import { addMonths, currentYM, goalProjection, growHoldings, monthSummary, monthlyYield, monthsBetween, ymOf } from './finance';
-import { todayISO } from './format';
+import { money, monthShort as monthLabel, todayISO } from './format';
 
 /**
  * Progress and projection of a goal.
@@ -83,11 +83,32 @@ export function goalStatus(
   for (let i = 1; i <= 12; i++) base12 += baseAt(i);
   const avgBase = base12 / 12;
 
+  /** Breakdown of what enters in a given future month (for the chart tooltip). */
+  const detailAt = (ym: string) => {
+    const i = monthsBetween(now, ym);
+    const out: { label: string; value: number; hint?: string }[] = [];
+    if (surplusMode) {
+      const prev = addMonths(now, i - 1);
+      const sum = monthSummary(transactions, prev);
+      const earmarkedIn = sum.items.filter((t) => t.goal_id && t.kind === 'income').reduce((a, t) => a + t.amount, 0);
+      out.push({
+        label: `${String(goal.surplus_percent).replace('.', ',')}% da sobra de ${monthLabel(prev)}`,
+        value: baseAt(i),
+        hint: `ganhos ${money(sum.income - earmarkedIn)} − custos ${money(sum.expense)} (fixos ${money(sum.fixedExpense)} + pontuais ${money(sum.oneTimeExpense)})`,
+      });
+    } else {
+      out.push({ label: 'Aporte fixo da meta', value: goal.monthly_contribution, hint: 'Valor fixo: não considera ganhos e custos lançados.' });
+    }
+    const lump = lumps.get(i);
+    if (lump) out.push({ label: 'Ganhos pontuais destinados', value: lump });
+    return out;
+  };
+
   /** What enters the goal in a given future month (for charts). */
   const contribution = (ym: string) => contributionAt(monthsBetween(now, ym));
 
   return {
-    contribution, linkedIds, avgBase, nextBase: baseAt(1), surplusMode,
+    contribution, detailAt, linkedIds, avgBase, nextBase: baseAt(1), surplusMode,
     parts, inAccounts, pending, pendingItems, future, futureItems, saved,
     progress: Math.min(1, saved / goal.target_amount),
     monthlyYield: proj.monthlyYield, months: proj.months, reachYM, path: proj.path, neededMonthly,
