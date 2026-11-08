@@ -1,5 +1,5 @@
 import type { Goal, Investment, Snapshot, Transaction } from './types';
-import { addMonths, currentYM, goalProjection, growHoldings, monthSummary, monthlyYield, monthsBetween, ymOf } from './finance';
+import { addMonths, currentYM, goalProjection, growHoldings, monthSummary, monthlyYield, monthsBetween, surplusLines, ymOf } from './finance';
 import { money, monthShort as monthLabel, todayISO } from './format';
 
 /**
@@ -92,16 +92,15 @@ export function goalStatus(
     const i = monthsBetween(now, ym);
     const out: { label: string; value: number; hint?: string }[] = [];
     if (surplusMode) {
-      const pctLabel = `${String(goal.surplus_percent).replace('.', ',')}%`;
       const months = i === 1 ? [now, ym] : [ym];
       for (const m of months) {
         const sum = monthSummary(transactions, m);
         const earmarkedIn = sum.items.filter((t) => t.goal_id && t.kind === 'income').reduce((a, t) => a + t.amount, 0);
-        out.push({
-          label: `${pctLabel} da sobra de ${monthLabel(m)}${m === now ? ' (mês atual)' : ''}`,
-          value: freeSurplus(m) * pct,
-          hint: `ganhos ${money(sum.income - earmarkedIn)} − custos ${money(sum.expense)} (fixos ${money(sum.fixedExpense)} + pontuais ${money(sum.oneTimeExpense)})`,
-        });
+        const r = surplusLines(transactions, m, `${monthLabel(m)}${m === now ? ' (mês atual)' : ''}`, earmarkedIn);
+        out.push(...r.lines);
+        if (pct !== 1) {
+          out.push({ label: `Parte da sobra que fica fora da meta (${String(100 - goal.surplus_percent).replace('.', ',')}%)`, value: -(r.net * (1 - pct)) });
+        }
       }
     } else {
       out.push({ label: 'Aporte fixo da meta', value: goal.monthly_contribution, hint: 'Valor fixo: não considera ganhos e custos lançados.' });

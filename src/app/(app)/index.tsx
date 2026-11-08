@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useData } from '../../context/DataContext';
-import { addMonths, balanceSeries, currentYM, monthSummary } from '../../lib/finance';
+import { addMonths, balanceSeries, currentYM, monthSummary, surplusLines } from '../../lib/finance';
 import { goalStatus } from '../../lib/goals';
 import { money, monthLong, monthShort } from '../../lib/format';
 import { INVESTMENT_TYPES, typeColor, type InvestmentType } from '../../lib/types';
@@ -26,13 +26,7 @@ export default function Dashboard() {
     if (goalSt) return goalSt.detailAt(ym);
     const now = currentYM();
     const months = ym === addMonths(now, 1) ? [now, ym] : [ym];
-    return months.map((m) => {
-      const x = monthSummary(transactions, m);
-      return {
-        label: `Sobra de ${monthShort(m)}${m === now ? ' (mês atual)' : ''}`, value: x.net,
-        hint: `ganhos ${money(x.income)} − custos ${money(x.expense)} (fixos ${money(x.fixedExpense)} + pontuais ${money(x.oneTimeExpense)})`,
-      };
-    });
+    return months.flatMap((m) => surplusLines(transactions, m, `${monthShort(m)}${m === now ? ' (mês atual)' : ''}`).lines);
   };
 
   const goal = goals.find((g) => g.id === goalId) ?? null;
@@ -143,7 +137,7 @@ export default function Dashboard() {
           </Card>
 
           <Card>
-            <Subtitle>{monthLong(currentYM())}</Subtitle>
+            <Subtitle>Resumo do mês atual ({monthLong(currentYM())})</Subtitle>
             <Line label="Ganhos fixos (previsão)" value={month.fixedIncome} color={colors.income} />
             <Line label="Ganhos pontuais" value={month.oneTimeIncome} color={colors.income} />
             <Line label="Custos fixos" value={-month.fixedExpense} color={colors.expense} />

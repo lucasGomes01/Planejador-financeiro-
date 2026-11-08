@@ -195,3 +195,20 @@ export function growHoldings(holdings: Holding[], cdiAnnual: number, n: number) 
   for (let i = 0; i < n; i++) for (const h of hs) h.value += monthlyYield(cdiAnnual, h.inv, h.value);
   return hs.reduce((s, h) => s + h.value, 0);
 }
+
+/**
+ * Lines that explain a month's surplus, one per item type
+ * (used by the projection breakdown). `excludeIncome` removes incomes counted elsewhere.
+ */
+export function surplusLines(txs: Transaction[], ym: string, label: string, excludeIncome = 0) {
+  const s = monthSummary(txs, ym);
+  const lines: { label: string; value: number; hint?: string }[] = [];
+  const income = s.income - excludeIncome;
+  if (income) lines.push({ label: `Ganhos de ${label}`, value: income });
+  if (s.fixedExpense) lines.push({ label: `Custos fixos de ${label}`, value: -s.fixedExpense });
+  if (s.oneTimeExpense) {
+    const names = s.items.filter((t) => t.kind === 'expense' && t.recurrence === 'one_time').map((t) => t.description);
+    lines.push({ label: `Custos pontuais de ${label}`, value: -s.oneTimeExpense, hint: names.join(', ') });
+  }
+  return { lines, net: income - s.expense };
+}
