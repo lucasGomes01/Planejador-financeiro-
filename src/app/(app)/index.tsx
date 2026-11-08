@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useData } from '../../context/DataContext';
@@ -7,6 +7,7 @@ import { goalStatus } from '../../lib/goals';
 import { money, monthLong, monthShort } from '../../lib/format';
 import { INVESTMENT_TYPES, typeColor, type InvestmentType } from '../../lib/types';
 import { LineChart } from '../../components/LineChart';
+import { ProjectionDetail, type DetailLine } from '../../components/ProjectionDetail';
 import { Card, Chip, ErrorText, Muted, Row, Segmented, Subtitle } from '../../components/ui';
 import { Fab } from '../../components/Fab';
 import { colors } from '../../components/theme';
@@ -20,6 +21,19 @@ export default function Dashboard() {
   const [projection, setProjection] = useState(true);
   /** null = everything; otherwise only what is earmarked for this goal */
   const [goalId, setGoalId] = useState<string | null>(null);
+  const [selIdx, setSelIdx] = useState<number | null>(null);
+  const monthDetail = (ym: string): DetailLine[] => {
+    if (goalSt) return goalSt.detailAt(ym);
+    const now = currentYM();
+    const months = ym === addMonths(now, 1) ? [now, ym] : [ym];
+    return months.map((m) => {
+      const x = monthSummary(transactions, m);
+      return {
+        label: `Sobra de ${monthShort(m)}${m === now ? ' (mês atual)' : ''}`, value: x.net,
+        hint: `ganhos ${money(x.income)} − custos ${money(x.expense)} (fixos ${money(x.fixedExpense)} + pontuais ${money(x.oneTimeExpense)})`,
+      };
+    });
+  };
 
   const goal = goals.find((g) => g.id === goalId) ?? null;
   const goalSt = useMemo(
@@ -35,11 +49,14 @@ export default function Dashboard() {
   const series = useMemo(() => balanceSeries({
     snapshots, investments, selected, monthsBack: Number(range) - 1, monthsAhead: projection ? 12 : 0,
     cdiAnnual: settings.cdi_annual_rate,
-    // a month's surplus is saved at its end → enters the following month
-    contribution: goalSt ? goalSt.contribution : (ym) => monthSummary(transactions, addMonths(ym, -1)).net,
+    // each point = balance at the end of its month; the current month's surplus enters in month 1
+    contribution: goalSt
+      ? goalSt.contribution
+      : (ym) => monthSummary(transactions, ym).net + (ym === addMonths(currentYM(), 1) ? monthSummary(transactions, currentYM()).net : 0),
     startExtra: goalSt ? goalSt.pending : 0,
   }), [snapshots, investments, selected, range, projection, settings, transactions, goalSt]);
 
+  useEffect(() => setSelIdx(null), [range, projection, goalId]);
   const month = monthSummary(transactions, currentYM());
   const totalAll = investments.reduce((s, i) => s + (balances.get(i.id) ?? 0), 0);
 
@@ -73,16 +90,7 @@ export default function Dashboard() {
                 ))}
               </Row>
             )}
-            <LineChart data={series} cdiLabel={`${String(settings.cdi_annual_rate).replace('.', ',')}%`}
-              contribLabel={goal ? 'Aportes da meta' : 'Sobra mensal prevista'}
-              monthDetail={goalSt ? goalSt.detailAt : (ym) => {
-                const prev = addMonths(ym, -1);
-                const m = monthSummary(transactions, prev);
-                return [{
-                  label: `Sobra de ${monthShort(prev)}`, value: m.net,
-                  hint: `ganhos ${money(m.income)} − custos ${money(m.expense)} (fixos ${money(m.fixedExpense)} + pontuais ${money(m.oneTimeExpense)})`,
-                }];
-              }} />
+            <LineChart data={series} onSelect={setSelIdx} />
             <Segmented<Range> value={range} onChange={setRange}
               options={[{ value: '6', label: '6 meses' }, { value: '12', label: '1 ano' }, { value: '24', label: '2 anos' }]} />
             <Row style={{ flexWrap: 'wrap', marginBottom: 8 }}>
@@ -143,6 +151,12 @@ export default function Dashboard() {
             <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 8 }} />
             <Line label="Sobra do mês" value={month.net} color={month.net >= 0 ? colors.income : colors.expense} bold />
           </Card>
+
+          {projection && (
+            <ProjectionDetail data={series} index={selIdx} monthDetail={monthDetail}
+              cdiLabel={`${String(settings.cdi_annual_rate).replace('.', ',')}%`}
+              contribLabel={goal ? 'Aportes da meta' : 'Sobras previstas (ganhos − custos)'} />
+          )}
         </View>
       </ScrollView>
       <Fab />

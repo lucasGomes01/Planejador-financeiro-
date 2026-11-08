@@ -10,6 +10,7 @@ import { rateLabel, typeColor } from '../../lib/types';
 import { dateBR } from '../../lib/format';
 import { GoalForm } from '../../components/GoalForm';
 import { LineChart } from '../../components/LineChart';
+import { ProjectionDetail } from '../../components/ProjectionDetail';
 import { Progress } from '../../components/Progress';
 import { Button, Card, Chip, Empty, Muted, Row, Screen, Segmented, Subtitle } from '../../components/ui';
 import { colors } from '../../components/theme';
@@ -18,6 +19,7 @@ export default function GoalDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { goals, investments, balances, settings, transactions, snapshots, updateGoal, deleteGoal, updateInvestment } = useData();
   const [tab, setTab] = useState<'overview' | 'edit'>('overview');
+  const [selIdx, setSelIdx] = useState<number | null>(null);
   const goal = goals.find((g) => g.id === id);
   const st = useMemo(() => goal && goalStatus(goal, investments, balances, settings.cdi_annual_rate, transactions, snapshots),
     [goal, investments, balances, settings, transactions, snapshots]);
@@ -66,8 +68,7 @@ export default function GoalDetail() {
           {path.length > 1 && (
             <Card>
               <Subtitle>Projeção</Subtitle>
-              <LineChart data={path} cdiLabel={`${String(settings.cdi_annual_rate).replace('.', ',')}%`}
-                contribLabel="Aportes da meta" monthDetail={st.detailAt} />
+              <LineChart data={path} onSelect={setSelIdx} />
             </Card>
           )}
 
@@ -126,6 +127,9 @@ export default function GoalDetail() {
               </View>
             </Row>
           </Card>
+
+          <ProjectionDetail data={path} index={selIdx} monthDetail={st.detailAt} contribLabel="Aportes da meta"
+            cdiLabel={`${String(settings.cdi_annual_rate).replace('.', ',')}%`} />
         </>
       ) : (
         <>

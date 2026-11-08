@@ -8,10 +8,10 @@ import { money, monthShort as monthLabel, todayISO } from './format';
  * Every future month i (1 = next month) the goal receives:
  * - base part:
  *   - mode 'fixed'   → goal.monthly_contribution
- *   - mode 'surplus' → surplus of the PREVIOUS month (income − fixed and one-time expenses,
+ *   - mode 'surplus' → surplus of month i itself (income − fixed and one-time expenses,
  *                      not counting incomes earmarked for any goal) × surplus_percent.
- *                      The surplus of a month is assumed to be saved at its end, so the
- *                      current month's surplus enters next month.
+ *                      Each chart point is the balance at the END of its month. The current
+ *                      month has not ended yet, so its surplus is added in month 1.
  * - plus one-time incomes earmarked for this goal:
  *   - dated after the last balance update of the goal's places (and up to today) count now,
  *     as "a depositar" (received but not yet inside a balance);
@@ -55,7 +55,11 @@ export function goalStatus(
   const surplusMode = goal.contribution_mode === 'surplus';
   const pct = (goal.surplus_percent ?? 100) / 100;
   /** base part entering in month i */
-  const baseAt = (i: number) => (surplusMode ? freeSurplus(addMonths(now, i - 1)) * pct : goal.monthly_contribution);
+  const baseAt = (i: number) => {
+    if (!surplusMode) return goal.monthly_contribution;
+    const own = freeSurplus(addMonths(now, i));
+    return (i === 1 ? own + freeSurplus(now) : own) * pct;
+  };
   const contributionAt = (i: number) => baseAt(i) + (lumps.get(i) ?? 0);
 
   const saved = inAccounts + pending;
@@ -88,14 +92,17 @@ export function goalStatus(
     const i = monthsBetween(now, ym);
     const out: { label: string; value: number; hint?: string }[] = [];
     if (surplusMode) {
-      const prev = addMonths(now, i - 1);
-      const sum = monthSummary(transactions, prev);
-      const earmarkedIn = sum.items.filter((t) => t.goal_id && t.kind === 'income').reduce((a, t) => a + t.amount, 0);
-      out.push({
-        label: `${String(goal.surplus_percent).replace('.', ',')}% da sobra de ${monthLabel(prev)}`,
-        value: baseAt(i),
-        hint: `ganhos ${money(sum.income - earmarkedIn)} − custos ${money(sum.expense)} (fixos ${money(sum.fixedExpense)} + pontuais ${money(sum.oneTimeExpense)})`,
-      });
+      const pctLabel = `${String(goal.surplus_percent).replace('.', ',')}%`;
+      const months = i === 1 ? [now, ym] : [ym];
+      for (const m of months) {
+        const sum = monthSummary(transactions, m);
+        const earmarkedIn = sum.items.filter((t) => t.goal_id && t.kind === 'income').reduce((a, t) => a + t.amount, 0);
+        out.push({
+          label: `${pctLabel} da sobra de ${monthLabel(m)}${m === now ? ' (mês atual)' : ''}`,
+          value: freeSurplus(m) * pct,
+          hint: `ganhos ${money(sum.income - earmarkedIn)} − custos ${money(sum.expense)} (fixos ${money(sum.fixedExpense)} + pontuais ${money(sum.oneTimeExpense)})`,
+        });
+      }
     } else {
       out.push({ label: 'Aporte fixo da meta', value: goal.monthly_contribution, hint: 'Valor fixo: não considera ganhos e custos lançados.' });
     }
