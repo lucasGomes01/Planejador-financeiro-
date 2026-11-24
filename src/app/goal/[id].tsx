@@ -4,7 +4,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useData } from '../../context/DataContext';
 import { confirm } from '../../lib/confirm';
 import { goalStatus } from '../../lib/goals';
-import { balanceSeries } from '../../lib/finance';
+import { balanceSeries, simulateTransactions } from '../../lib/finance';
+import { useSimulation } from '../../context/SimulationContext';
+import { SimulationPanel } from '../../components/SimulationPanel';
 import { money, monthLong } from '../../lib/format';
 import { rateLabel, typeColor } from '../../lib/types';
 import { dateBR } from '../../lib/format';
@@ -21,8 +23,12 @@ export default function GoalDetail() {
   const [tab, setTab] = useState<'overview' | 'edit'>('overview');
   const [selIdx, setSelIdx] = useState<number | null>(null);
   const goal = goals.find((g) => g.id === id);
-  const st = useMemo(() => goal && goalStatus(goal, investments, balances, settings.cdi_annual_rate, transactions, snapshots),
-    [goal, investments, balances, settings, transactions, snapshots]);
+  const { sim } = useSimulation();
+  const effTxs = useMemo(() => (sim ? simulateTransactions(transactions, sim) : transactions), [sim, transactions]);
+  const stReal = useMemo(() => (sim && goal ? goalStatus(goal, investments, balances, settings.cdi_annual_rate, transactions, snapshots) : null),
+    [sim, goal, investments, balances, settings, transactions, snapshots]);
+  const st = useMemo(() => goal && goalStatus(goal, investments, balances, settings.cdi_annual_rate, effTxs, snapshots),
+    [goal, investments, balances, settings, effTxs, snapshots]);
   if (!goal || !st) return <Screen><Empty>Meta não encontrada.</Empty></Screen>;
 
   const path = balanceSeries({
@@ -30,6 +36,11 @@ export default function GoalDetail() {
     monthsAhead: Math.min(60, Math.max(6, st.months ?? 60)), cdiAnnual: settings.cdi_annual_rate,
     contribution: st.contribution, startExtra: st.pending,
   });
+  const realPath = stReal ? balanceSeries({
+    snapshots, investments, selected: st.linkedIds, monthsBack: 0,
+    monthsAhead: path.length - 1, cdiAnnual: settings.cdi_annual_rate,
+    contribution: stReal.contribution, startExtra: stReal.pending,
+  }) : null;
 
   return (
     <Screen>
@@ -53,11 +64,17 @@ export default function GoalDetail() {
                 ? `Entra por mês: ${String(goal.surplus_percent).replace('.', ',')}% da sobra (ganhos − custos fixos e pontuais). Próximo mês: ${money(st.nextBase)} · média 12 meses: ${money(st.avgBase)}`
                 : `Entra por mês: ${money(goal.monthly_contribution)}, limitado à sobra do mês. Próximo mês: ${money(st.nextBase)} · média 12 meses: ${money(st.avgBase)}`}
             </Muted>
-            <Muted style={{ marginTop: 4 }}>
+            {!sim && <Muted style={{ marginTop: 4 }}>
               {st.months === 0 ? 'Meta atingida! 🎉'
                 : st.reachYM ? `Com esse ritmo você chega lá em ${monthLong(st.reachYM)} (${st.months} meses).`
                 : 'Defina um aporte mensal ou vincule investimentos para ver a previsão.'}
-            </Muted>
+            </Muted>}
+            {sim && stReal ? (
+              <Text style={{ color: colors.accent, fontWeight: '600', marginTop: 4 }}>
+                Simulação ({money(sim.monthlyIncome)}/mês): {st.reachYM ? `chega em ${monthLong(st.reachYM)}` : 'não atinge'}
+                {' '}· hoje: {stReal.reachYM ? monthLong(stReal.reachYM) : 'não atinge'}
+              </Text>
+            ) : null}
             {st.neededMonthly != null && goal.target_date ? (
               <Muted style={{ marginTop: 4 }}>
                 Para atingir em {monthLong(goal.target_date.slice(0, 7))}: precisa entrar {money(st.neededMonthly)}/mês.
@@ -68,7 +85,8 @@ export default function GoalDetail() {
           {path.length > 1 && (
             <Card>
               <Subtitle>Projeção</Subtitle>
-              <LineChart data={path} onSelect={setSelIdx} />
+              <SimulationPanel />
+              <LineChart data={path} onSelect={setSelIdx} compare={realPath} color={sim ? colors.accent : colors.primary} />
             </Card>
           )}
 

@@ -4,6 +4,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { DataProvider } from '../context/DataContext';
+import { SimulationProvider } from '../context/SimulationContext';
 import { AppLock } from '../components/AppLock';
 import { ResetPassword } from '../components/ResetPassword';
 import { colors } from '../components/theme';
@@ -44,10 +45,12 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AuthProvider>
         <DataProvider>
+          <SimulationProvider>
           <StatusBar style="dark" />
           <AppLock>
             <RootNavigator />
           </AppLock>
+          </SimulationProvider>
         </DataProvider>
       </AuthProvider>
     </SafeAreaProvider>

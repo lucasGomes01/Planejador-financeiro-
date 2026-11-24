@@ -9,9 +9,13 @@ const H = 220;
 const PAD = { l: 56, r: 22, t: 12, b: 28 };
 
 export function LineChart({
-  data, color = colors.primary, onSelect,
+  data, color = colors.primary, onSelect, compare, compareLabel = 'Atual', dataLabel = 'Simulação',
 }: {
   data: SeriesPoint[];
+  /** optional second series (same months) drawn in gray for comparison */
+  compare?: SeriesPoint[] | null;
+  compareLabel?: string;
+  dataLabel?: string;
   color?: string;
   /** called with the tapped point index (null when deselected) */
   onSelect?: (index: number | null) => void;
@@ -20,7 +24,7 @@ export function LineChart({
   const [sel, setSel] = useState<number | null>(null);
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
-  const values = data.map((d) => d.value);
+  const values = [...data, ...(compare ?? [])].map((d) => d.value);
   const max = Math.max(1, ...values);
   const min = Math.min(0, ...values);
   const w = Math.max(0, width - PAD.l - PAD.r);
@@ -35,6 +39,9 @@ export function LineChart({
   const real = pathFor(0, realEnd);
   const area = realEnd >= 0 ? `${real} L${x(realEnd)},${y(min)} L${x(0)},${y(min)} Z` : '';
   const proj = firstProj > 0 ? pathFor(firstProj - 1, data.length - 1) : '';
+  const cmpPath = compare && firstProj > 0
+    ? compare.slice(firstProj - 1).map((d, k) => `${k === 0 ? 'M' : 'L'}${x(firstProj - 1 + k).toFixed(1)},${y(d.value).toFixed(1)}`).join(' ')
+    : '';
 
   const ticks = [min, (min + max) / 2, max];
   const labelEvery = Math.max(1, Math.ceil(data.length / Math.max(1, Math.floor(w / 56))));
@@ -48,12 +55,23 @@ export function LineChart({
           <Text style={{ color: colors.muted, fontSize: 12 }}>
             {s.projected ? `Previsto para o fim de ${monthShort(s.ym)}` : monthShort(s.ym)}
           </Text>
-          <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text }}>{money(s.value)}</Text>
+          <Text style={{ fontSize: 24, fontWeight: '800', color: compare && s.projected ? color : colors.text }}>{money(s.value)}</Text>
+          {compare && s.projected && sel != null && compare[sel] ? (
+            <Text style={{ color: colors.muted, fontSize: 12 }}>
+              {compareLabel}: {money(compare[sel].value)} · diferença {s.value - compare[sel].value >= 0 ? '+' : '−'}{money(Math.abs(s.value - compare[sel].value))}
+            </Text>
+          ) : null}
           {data.some((d) => d.projected) ? (
             <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
               {s.projected ? 'Detalhamento no fim da página.' : 'Toque na linha tracejada para ver a previsão de cada mês.'}
             </Text>
           ) : null}
+        </View>
+      ) : null}
+      {compare ? (
+        <View style={{ flexDirection: 'row', gap: 14, marginBottom: 4 }}>
+          <Text style={{ fontSize: 11, color }}>━ ━ {dataLabel}</Text>
+          <Text style={{ fontSize: 11, color: colors.muted }}>┄┄ {compareLabel}</Text>
         </View>
       ) : null}
       {width > 0 && (
@@ -74,6 +92,7 @@ export function LineChart({
           ))}
           {area ? <Path d={area} fill="url(#fill)" /> : null}
           {real ? <Path d={real} stroke={color} strokeWidth={2.5} fill="none" strokeLinejoin="round" /> : null}
+          {cmpPath ? <Path d={cmpPath} stroke={colors.muted} strokeWidth={1.5} fill="none" strokeDasharray="3 4" opacity={0.8} /> : null}
           {proj ? <Path d={proj} stroke={color} strokeWidth={2} fill="none" strokeDasharray="6 5" opacity={0.7} /> : null}
           {data.map((d, i) =>
             i % labelEvery === 0 || i === data.length - 1 ? (

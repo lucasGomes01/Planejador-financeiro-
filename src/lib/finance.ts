@@ -212,3 +212,30 @@ export function surplusLines(txs: Transaction[], ym: string, label: string, excl
   }
   return { lines, net: income - s.expense };
 }
+
+export interface IncomeSimulation {
+  /** simulated total of fixed monthly income */
+  monthlyIncome: number;
+  /** first month (YYYY-MM) the simulated income applies */
+  startYM: string;
+}
+
+/**
+ * "What if" scenario: from `startYM` on, all fixed (monthly) incomes are replaced by a single
+ * simulated income. Expenses and one-time incomes stay as they are. Nothing is saved.
+ */
+export function simulateTransactions(txs: Transaction[], sim: IncomeSimulation): Transaction[] {
+  const startISO = `${sim.startYM}-01`;
+  const prevEnd = `${addMonths(sim.startYM, -1)}-01`;
+  const out = txs.flatMap((t) => {
+    if (t.kind !== 'income' || t.recurrence !== 'fixed') return [t];
+    if (t.date >= startISO) return []; // would start after the simulation begins → replaced
+    if (t.end_date && t.end_date < startISO) return [t]; // already over before it
+    return [{ ...t, end_date: prevEnd }];
+  });
+  out.push({
+    id: 'simulation', kind: 'income', recurrence: 'fixed', description: 'Ganho simulado', category: 'Simulação',
+    amount: sim.monthlyIncome, date: startISO, end_date: null, goal_id: null,
+  });
+  return out;
+}

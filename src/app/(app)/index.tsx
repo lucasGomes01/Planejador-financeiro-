@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useData } from '../../context/DataContext';
-import { addMonths, balanceSeries, currentYM, monthSummary, surplusLines } from '../../lib/finance';
+import { addMonths, balanceSeries, currentYM, monthSummary, simulateTransactions, surplusLines } from '../../lib/finance';
+import { useSimulation } from '../../context/SimulationContext';
+import { SimulationPanel } from '../../components/SimulationPanel';
 import { goalStatus } from '../../lib/goals';
 import { money, monthLong, monthShort } from '../../lib/format';
 import { INVESTMENT_TYPES, typeColor, type InvestmentType } from '../../lib/types';
@@ -22,35 +24,42 @@ export default function Dashboard() {
   /** null = everything; otherwise only what is earmarked for this goal */
   const [goalId, setGoalId] = useState<string | null>(null);
   const [selIdx, setSelIdx] = useState<number | null>(null);
+  const { sim } = useSimulation();
+  /** transactions used for the projection: the real ones, or the simulated scenario */
+  const effTxs = useMemo(() => (sim ? simulateTransactions(transactions, sim) : transactions), [sim, transactions]);
   const monthDetail = (ym: string): DetailLine[] => {
     if (goalSt) return goalSt.detailAt(ym);
     const now = currentYM();
     const months = ym === addMonths(now, 1) ? [now, ym] : [ym];
-    return months.flatMap((m) => surplusLines(transactions, m, `${monthShort(m)}${m === now ? ' (mês atual)' : ''}`).lines);
+    return months.flatMap((m) => surplusLines(effTxs, m, `${monthShort(m)}${m === now ? ' (mês atual)' : ''}`).lines);
   };
 
   const goal = goals.find((g) => g.id === goalId) ?? null;
-  const goalSt = useMemo(
-    () => goal && goalStatus(goal, investments, balances, settings.cdi_annual_rate, transactions, snapshots),
-    [goal, investments, balances, settings, transactions, snapshots],
-  );
+  const goalStFor = (txs: typeof transactions) =>
+    goal && goalStatus(goal, investments, balances, settings.cdi_annual_rate, txs, snapshots);
+  const goalSt = useMemo(() => goalStFor(effTxs), [goal, investments, balances, settings, effTxs, snapshots]);
+  const goalStReal = useMemo(() => (sim ? goalStFor(transactions) : goalSt), [sim, goalSt, goal, investments, balances, settings, transactions, snapshots]);
   const base = useMemo(
     () => (goal ? investments.filter((i) => i.goal_id === goal.id) : investments),
     [goal, investments],
   );
   const selected = useMemo(() => new Set(base.map((i) => i.id).filter((id) => !excluded.has(id))), [base, excluded]);
 
-  const series = useMemo(() => balanceSeries({
+  const seriesFor = (txs: typeof transactions, gs: typeof goalSt) => balanceSeries({
     snapshots, investments, selected, monthsBack: Number(range) - 1, monthsAhead: projection ? 12 : 0,
     cdiAnnual: settings.cdi_annual_rate,
     // each point = balance at the end of its month; the current month's surplus enters in month 1
-    contribution: goalSt
-      ? goalSt.contribution
-      : (ym) => monthSummary(transactions, ym).net + (ym === addMonths(currentYM(), 1) ? monthSummary(transactions, currentYM()).net : 0),
-    startExtra: goalSt ? goalSt.pending : 0,
-  }), [snapshots, investments, selected, range, projection, settings, transactions, goalSt]);
+    contribution: gs
+      ? gs.contribution
+      : (ym) => monthSummary(txs, ym).net + (ym === addMonths(currentYM(), 1) ? monthSummary(txs, currentYM()).net : 0),
+    startExtra: gs ? gs.pending : 0,
+  });
+  const series = useMemo(() => seriesFor(effTxs, goalSt),
+    [snapshots, investments, selected, range, projection, settings, effTxs, goalSt]);
+  const realSeries = useMemo(() => (sim && projection ? seriesFor(transactions, goalStReal) : null),
+    [sim, snapshots, investments, selected, range, projection, settings, transactions, goalStReal]);
 
-  useEffect(() => setSelIdx(null), [range, projection, goalId]);
+  useEffect(() => setSelIdx(null), [range, projection, goalId, sim]);
   const month = monthSummary(transactions, currentYM());
   const totalAll = investments.reduce((s, i) => s + (balances.get(i.id) ?? 0), 0);
 
@@ -84,7 +93,14 @@ export default function Dashboard() {
                 ))}
               </Row>
             )}
-            <LineChart data={series} onSelect={setSelIdx} />
+            <SimulationPanel />
+            <LineChart data={series} onSelect={setSelIdx} compare={realSeries} color={sim ? colors.accent : colors.primary} />
+            {sim && realSeries && goalSt && goalStReal ? (
+              <Muted style={{ marginBottom: 8 }}>
+                Meta {goal?.name}: {goalSt.reachYM ? `atingida em ${monthLong(goalSt.reachYM)}` : 'não atingida'} na simulação
+                {' '}(hoje: {goalStReal.reachYM ? monthLong(goalStReal.reachYM) : 'não atingida'}).
+              </Muted>
+            ) : null}
             <Segmented<Range> value={range} onChange={setRange}
               options={[{ value: '6', label: '6 meses' }, { value: '12', label: '1 ano' }, { value: '24', label: '2 anos' }]} />
             <Row style={{ flexWrap: 'wrap', marginBottom: 8 }}>
