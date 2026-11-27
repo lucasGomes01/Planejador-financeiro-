@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { authLinkProblem, recovery, supabase } from '../lib/supabase';
 
 interface AuthState {
   session: Session | null;
@@ -10,6 +10,8 @@ interface AuthState {
   /** true after opening a password-reset link: the user must set a new password */
   recovering: boolean;
   finishRecovery: () => void;
+  /** message when the app was opened from an e-mail link that did not work */
+  linkError: string | null;
   refreshAal: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -20,7 +22,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsMfa, setNeedsMfa] = useState(false);
-  const [recovering, setRecovering] = useState(false);
+  const [recovering, setRecovering] = useState(recovery.get());
+  const [linkError, setLinkError] = useState<string | null>(null);
+  useEffect(() => {
+    // the event may have fired between the first render and this effect: re-read it
+    setRecovering(recovery.get());
+    return recovery.subscribe(setRecovering);
+  }, []);
 
   const refreshAal = useCallback(async () => {
     const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
@@ -33,12 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       setSession(data.session);
       if (data.session) await refreshAal();
+      else setLinkError(authLinkProblem());
       setLoading(false);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
-      if (event === 'PASSWORD_RECOVERY') setRecovering(true);
-      if (event === 'SIGNED_OUT') setRecovering(false);
       // Do not await Supabase calls inside this callback (can deadlock); defer.
       if (s) setTimeout(refreshAal, 0);
       else setNeedsMfa(false);
@@ -53,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
-  return <Ctx.Provider value={{ session, loading, needsMfa, recovering, finishRecovery: () => setRecovering(false), refreshAal, signOut }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ session, loading, needsMfa, recovering, finishRecovery: recovery.clear, linkError, refreshAal, signOut }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {

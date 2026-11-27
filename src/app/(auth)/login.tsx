@@ -3,10 +3,12 @@ import { Link } from 'expo-router';
 import { Platform, Text, View } from 'react-native';
 import { supabase, isConfigured } from '../../lib/supabase';
 import { isEmail } from '../../lib/password';
+import { useAuth } from '../../context/AuthContext';
 import { Button, Card, ErrorText, Field, Muted, Screen, Title } from '../../components/ui';
 import { colors } from '../../components/theme';
 
 export default function Login() {
+  const { linkError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,6 +39,7 @@ export default function Login() {
       <View style={{ height: 48 }} />
       <Title>Planejador Financeiro</Title>
       <Muted style={{ marginBottom: 16 }}>Entre para ver seu planejamento.</Muted>
+      {linkError ? <ErrorText>{linkError}</ErrorText> : null}
       {!isConfigured && (
         <ErrorText>Supabase não configurado. Defina EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY no arquivo .env.</ErrorText>
       )}
